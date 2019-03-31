@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Cursor;
 use std::time::Instant;
 
+use semver::Version;
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
@@ -85,12 +86,29 @@ fn is_jar(e: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
+/// We want to prioritise crawling the newest jar of every coordinate first, but they might not
+/// all be semver compliant!
+fn semver_greatest_first(vec: Vec<&str>) -> (Vec<String>, Vec<String>) {
+    let (semver, non_semver): (Vec<&str>, Vec<&str>) = vec
+        .into_iter()
+        .partition(|string| Version::parse(string).is_ok());
+
+    let mut parsed: Vec<Version> = semver.iter().map(|v| Version::parse(v).unwrap()).collect();
+    parsed.sort();
+
+    return (
+        parsed.iter().map(|v| format!("{}", v)).rev().collect(),
+        non_semver.iter().map(|v| v.to_string()).collect(),
+    );
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
     use std::fs::File;
     use std::path::{Component, Path, PathBuf};
 
+    use semver::Version;
     use walkdir::WalkDir;
     use zip::ZipArchive;
 
@@ -130,6 +148,16 @@ mod test {
 
         dbg!(cache.find_artifacts());
         Ok(())
+    }
+
+    #[test]
+    fn sort_newest_first() {
+        let vec = vec!["1.0.0", "2.0.0", "3.0.0", "5.3.4.Final"];
+
+        let (orderable, non_orderable) = super::semver_greatest_first(vec);
+
+        assert_eq!(orderable, vec!["3.0.0", "2.0.0", "1.0.0"]);
+        assert_eq!(non_orderable, vec!["5.3.4.Final"]);
     }
 
     struct GradleJarCache {
