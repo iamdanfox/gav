@@ -27,9 +27,13 @@ fn main() -> Result<(), std::io::Error> {
 
     let entries: Vec<(String, OsString)> = gavs
         .par_iter()
-        .map(|gav| cache.jar_for_path(gav))
-        .filter_map(|maybe| maybe)
-        .flat_map(|jar_path| {
+        .flat_map(|gav| {
+            let maybe_jar_path = cache.jar_for_path(&gav);
+            if maybe_jar_path.is_none() {
+                return Vec::new();
+            }
+            let jar_path = maybe_jar_path.unwrap();
+
             let jar_file = File::open(&jar_path).unwrap();
             let mut jar = ZipArchive::new(jar_file).unwrap();
 
