@@ -13,20 +13,21 @@ use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
 fn main() -> Result<(), std::io::Error> {
-    let args: Vec<String> = args().collect();
-    let first_arg = &args.get(1).expect("Usage: gav /path/to/jars");
-
-    println!("Indexing {}", first_arg);
-    let before = Instant::now();
     let mut classes: BTreeMap<String, Vec<OsString>> = BTreeMap::new();
-    for walkdir in WalkDir::new(first_arg)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(is_jar)
-    {
-        let file = File::open(walkdir.path())?;
 
-        let mut jar = ZipArchive::new(file)?;
+    let before = Instant::now();
+    let cache = GradleJarCache {
+        root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
+    };
+
+    for jar_path in cache
+        .find_jars_latest_first()
+        .iter()
+        .map(|gav| cache.jar_for_path(gav))
+        .filter_map(|maybe| maybe)
+    {
+        let jar_file = File::open(&jar_path)?;
+        let mut jar = ZipArchive::new(jar_file)?;
 
         for i in 0..jar.len() {
             let jar_entry = jar.by_index(i)?;
@@ -44,9 +45,10 @@ fn main() -> Result<(), std::io::Error> {
             classes
                 .entry(class.to_str().unwrap().to_string())
                 .or_default()
-                .push((*walkdir.path().as_os_str()).to_os_string());
+                .push(jar_path.clone().into_os_string());
         }
     }
+
     let after = Instant::now();
     let duration = after.duration_since(before);
     println!("Indexed {:?} classes in {:?}", classes.len(), duration);
@@ -160,19 +162,19 @@ impl GradleJarCache {
             .collect();
     }
 
-    pub fn path(&self, gav: GroupArtifactVersion) -> PathBuf {
+    /// returns empty if the gav didn't contain a .jar (e.g. perhaps it just contained a pom)
+    pub fn jar_for_path(&self, gav: &GroupArtifactVersion) -> Option<PathBuf> {
         let mut buf = self.root.clone();
-        buf.push(gav.group);
-        buf.push(gav.name);
-        buf.push(gav.version);
+        buf.push(&gav.group);
+        buf.push(&gav.name);
+        buf.push(&gav.version);
 
-        let jar: Option<DirEntry> = WalkDir::new(buf)
+        WalkDir::new(&buf)
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(is_jar)
-            .nth(0);
-
-        jar.expect("GAV did not contain a .jar").into_path()
+            .nth(0)
+            .map(|d| d.into_path())
     }
 
     pub fn find_jars_latest_first(&self) -> Vec<GroupArtifactVersion> {
@@ -307,7 +309,7 @@ mod test {
         let cache = super::GradleJarCache {
             root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
         };
-        let buf = cache.path(GroupArtifactVersion {
+        let buf = cache.jar_for_path(GroupArtifactVersion {
             group: "io.searchbox".to_string(),
             name: "jest".to_string(),
             version: "0.1.7".to_string(),
