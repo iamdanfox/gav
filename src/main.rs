@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env::args;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::stdin;
+use std::io::Cursor;
 use std::time::Instant;
 
 use walkdir::{DirEntry, WalkDir};
@@ -14,7 +14,7 @@ fn main() -> Result<(), std::io::Error> {
 
     println!("Indexing {}", first_arg);
     let before = Instant::now();
-    let mut classes: HashMap<String, Vec<OsString>> = HashMap::new();
+    let mut classes: BTreeMap<String, Vec<OsString>> = BTreeMap::new();
     for walkdir in WalkDir::new(first_arg)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -26,42 +26,54 @@ fn main() -> Result<(), std::io::Error> {
 
         for i in 0..jar.len() {
             let jar_entry = jar.by_index(i)?;
-            if jar_entry.name().ends_with(".class") {
+
+            if jar_entry.name().contains('$') {
                 // TODO(dfox): don't keep anonymous inner classes (e.g. CacheKey$1)
-                let class = jar_entry.sanitized_name();
-                classes
-                    .entry(class.to_str().unwrap().to_string())
-                    .or_default()
-                    .push((*walkdir.path().as_os_str()).to_os_string());
+                continue;
             }
+
+            if !jar_entry.name().ends_with(".class") {
+                continue;
+            }
+
+            let class = jar_entry.sanitized_name();
+            classes
+                .entry(class.to_str().unwrap().to_string())
+                .or_default()
+                .push((*walkdir.path().as_os_str()).to_os_string());
         }
     }
     let after = Instant::now();
     let duration = after.duration_since(before);
     println!("Indexed {:?} classes in {:?}", classes.len(), duration);
 
-    dbg!(&classes.iter().nth(1).unwrap());
+    let keys: Vec<String> = classes
+        .keys()
+        .map(|s| s.to_owned().replace("/", ".").replace(".class", ""))
+        .collect();
+    let classnames_for_skim = keys.join("\n");
 
-    loop {
-        println!("Enter a search term, or Ctrl-C to exist:");
+    let options = skim::SkimOptionsBuilder::default()
+        .prompt(Some("class:"))
+        .tiebreak(Some("score,end,-begin,index".to_string()))
+        .delimiter(Some("."))
+        .build()
+        .unwrap();
 
-        let mut user_input = String::new();
-        stdin().read_line(&mut user_input)?;
+    let vec = skim::Skim::run_with(&options, Some(Box::new(Cursor::new(classnames_for_skim))))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(|| Vec::new());
 
-        let search_term = user_input.trim().to_lowercase();
+    let item = vec.first().unwrap();
+    println!("Selected {}: {}", item.get_index(), item.get_output_text());
 
-        classes
-            .iter()
-            .filter(|(key, _)| key.to_lowercase().contains(&search_term))
-            .take(4)
-            .for_each(|(key, gavs)| {
-                println!("\t{} {}", key, gavs.len());
+    let jars = classes
+        .iter()
+        .nth(item.get_index())
+        .expect("index should be a hit")
+        .1;
 
-                for gav in gavs {
-                    println!("\t\t{:?}", gav);
-                }
-            });
-    }
+    dbg!(jars);
 
     Ok(())
 }
