@@ -26,14 +26,21 @@ fn main() -> Result<(), std::io::Error> {
 
         for i in 0..jar.len() {
             let jar_entry = jar.by_index(i)?;
-            if jar_entry.name().ends_with(".class") {
+
+            if jar_entry.name().contains('$') {
                 // TODO(dfox): don't keep anonymous inner classes (e.g. CacheKey$1)
-                let class = jar_entry.sanitized_name();
-                classes
-                    .entry(class.to_str().unwrap().to_string())
-                    .or_default()
-                    .push((*walkdir.path().as_os_str()).to_os_string());
+                continue;
             }
+
+            if !jar_entry.name().ends_with(".class") {
+                continue;
+            }
+
+            let class = jar_entry.sanitized_name();
+            classes
+                .entry(class.to_str().unwrap().to_string())
+                .or_default()
+                .push((*walkdir.path().as_os_str()).to_os_string());
         }
     }
     let after = Instant::now();
@@ -48,6 +55,8 @@ fn main() -> Result<(), std::io::Error> {
 
     let options = skim::SkimOptionsBuilder::default()
         .prompt(Some("class:"))
+        .tiebreak(Some("score,end,-begin,index".to_string()))
+        .delimiter(Some("."))
         .build()
         .unwrap();
 
