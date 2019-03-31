@@ -17,19 +17,22 @@ mod test {
 
         assert_eq!(jar.len(), 1980);
 
-        let mut filenames = HashSet::new();
+        let mut classes = HashSet::new();
         for i in 0..jar.len() {
             let file = jar.by_index(i)?;
-            let filename = file.sanitized_name();
-            filenames.insert(filename);
+            if file.name().ends_with(".class") {
+                let filename = file.sanitized_name();
+                classes.insert(filename);
+            }
         }
 
-        assert!(filenames.contains(&PathBuf::from(
+        assert!(classes.contains(&PathBuf::from(
             "com/google/common/collect/ImmutableList.class"
         )));
-        assert!(filenames.contains(&PathBuf::from(
+        assert!(classes.contains(&PathBuf::from(
             "com/google/common/collect/ImmutableList$Builder.class"
         )));
+        assert_eq!(classes.len(), 1950);
         Ok(())
     }
 }
