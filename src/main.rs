@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::Cursor;
 use std::time::Instant;
 
-use std::iter::Map;
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
