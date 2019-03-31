@@ -1,0 +1,50 @@
+version: 2
+jobs:
+
+  checkout:
+    docker: [{ image: 'rust:1.33.0' }]
+    steps:
+    - checkout
+    - restore_cache: { key: registry }
+    - restore_cache: { key: 'deps-{{ checksum "Cargo.lock" }}' }
+    - run: { command: cargo fetch --locked }
+    - save_cache:
+        key: 'registry-{{ .BuildNum }}'
+        paths: [ /usr/local/cargo/registry/index ]
+    - save_cache:
+        key: 'deps-{{ checksum "Cargo.lock" }}'
+        paths:
+        - /usr/local/cargo/registry/cache
+        - /usr/local/cargo/registry/src
+    - persist_to_workspace:
+        root: /
+        paths:
+        - root/project
+        - usr/local/cargo/registry
+
+  test:
+    docker: [{ image: 'rust:1.33.0' }]
+    environment: { RUSTFLAGS: -D warnings }
+    steps:
+    - attach_workspace: { at: / }
+    - run: { command: rustup component add clippy rustfmt }
+    - run: { command: rustc --version > ~/rust-version }
+    - restore_cache: { key: 'test-{{ checksum "Cargo.lock" }}-{{ checksum "~/rust-version"}}' }
+    - run: { command: cargo clippy --all --all-targets }
+    - run: { command: cargo fmt --all -- --check }
+    - run: { command: cargo test --all --all-features }
+    - run: { command: 'if [[ -n "$(git status --porcelain)" ]]; then git status && exit 1; fi' }
+    - run: { command: rustc --version > ~/rust-version }
+    - save_cache:
+        key: 'test-{{ checksum "Cargo.lock" }}-{{ checksum "~/rust-version"}}'
+        paths: [ target ]
+
+workflows:
+  version: 2
+  build:
+    jobs:
+    - checkout:
+        filters: { tags: { only: /.*/ } }
+    - test:
+        filters: { tags: { only: /.*/ } }
+        requires: [ checkout ]
