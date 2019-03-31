@@ -19,7 +19,7 @@ fn main() -> Result<(), std::io::Error> {
     };
 
     let gavs = cache.find_jars_latest_first();
-    println!(
+    eprintln!(
         "Found {:?} gavs in {:?}",
         gavs.len(),
         Instant::now().duration_since(before)
@@ -65,7 +65,7 @@ fn main() -> Result<(), std::io::Error> {
     }
 
     let duration = Instant::now().duration_since(before);
-    println!("Indexed {:?} classes in {:?}", classes.len(), duration);
+    eprintln!("Indexed {:?} classes in {:?}", classes.len(), duration);
 
     let keys: Vec<String> = classes
         .keys()
@@ -85,15 +85,15 @@ fn main() -> Result<(), std::io::Error> {
         .unwrap_or_else(|| Vec::new());
 
     let selected = vec.first().unwrap();
-    println!("Selected: {}", selected.get_output_text());
+    eprintln!("Selected: {}", selected.get_output_text());
 
-    let jars = classes
+    classes
         .iter()
         .nth(selected.get_index())
         .expect("index should be a hit")
-        .1;
-
-    dbg!(jars);
+        .1
+        .iter()
+        .for_each(|gav| println!("{}", gav));
 
     Ok(())
 }
