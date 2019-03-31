@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env::args;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Cursor;
 use std::time::Instant;
 
+use std::iter::Map;
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
@@ -14,7 +15,7 @@ fn main() -> Result<(), std::io::Error> {
 
     println!("Indexing {}", first_arg);
     let before = Instant::now();
-    let mut classes: HashMap<String, Vec<OsString>> = HashMap::new();
+    let mut classes: BTreeMap<String, Vec<OsString>> = BTreeMap::new();
     for walkdir in WalkDir::new(first_arg)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -40,7 +41,10 @@ fn main() -> Result<(), std::io::Error> {
     let duration = after.duration_since(before);
     println!("Indexed {:?} classes in {:?}", classes.len(), duration);
 
-    let keys: Vec<String> = classes.keys().map(|s| s.to_owned()).collect();
+    let keys: Vec<String> = classes
+        .keys()
+        .map(|s| s.to_owned().replace("/", ".").replace(".class", ""))
+        .collect();
     let classnames_for_skim = keys.join("\n");
 
     let options = skim::SkimOptionsBuilder::default()
@@ -56,8 +60,10 @@ fn main() -> Result<(), std::io::Error> {
     println!("Selected {}: {}", item.get_index(), item.get_output_text());
 
     let jars = classes
-        .get(&item.get_output_text().to_string())
-        .expect("Match is always present in original map");
+        .iter()
+        .nth(item.get_index())
+        .expect("index should be a hit")
+        .1;
 
     dbg!(jars);
 
