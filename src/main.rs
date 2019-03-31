@@ -25,7 +25,7 @@ fn main() -> Result<(), std::io::Error> {
         Instant::now().duration_since(before)
     );
 
-    let entries: Vec<(String, OsString)> = gavs
+    let entries: Vec<(String, GroupArtifactVersion)> = gavs
         .par_iter()
         .flat_map(|gav| {
             let maybe_jar_path = cache.jar_for_path(&gav);
@@ -52,17 +52,14 @@ fn main() -> Result<(), std::io::Error> {
 
                     let class = jar_entry.sanitized_name();
 
-                    Some((
-                        class.to_str().unwrap().to_string(),
-                        jar_path.clone().into_os_string(),
-                    ))
+                    Some((class.to_str().unwrap().to_string(), gav.clone()))
                 })
                 .filter_map(|pair| pair)
-                .collect::<Vec<(String, OsString)>>()
+                .collect::<Vec<(String, GroupArtifactVersion)>>()
         })
         .collect();
 
-    let mut classes: BTreeMap<String, Vec<OsString>> = BTreeMap::new();
+    let mut classes: BTreeMap<String, Vec<GroupArtifactVersion>> = BTreeMap::new();
     for (class, jar) in entries {
         classes.entry(class).or_default().push(jar);
     }
@@ -87,12 +84,12 @@ fn main() -> Result<(), std::io::Error> {
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
-    let item = vec.first().unwrap();
-    println!("Selected {}: {}", item.get_index(), item.get_output_text());
+    let selected = vec.first().unwrap();
+    println!("Selected: {}", selected.get_output_text());
 
     let jars = classes
         .iter()
-        .nth(item.get_index())
+        .nth(selected.get_index())
         .expect("index should be a hit")
         .1;
 
@@ -131,6 +128,7 @@ struct GroupArtifact {
     path: String,
 }
 
+#[derive(Clone)]
 struct GroupArtifactVersion {
     group: String,
     name: String,
