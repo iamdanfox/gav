@@ -6,6 +6,7 @@ use std::io::Cursor;
 use std::time::Instant;
 
 use semver::Version;
+use std::path::{Component, Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
@@ -88,18 +89,75 @@ fn is_jar(e: &DirEntry) -> bool {
 
 /// We want to prioritise crawling the newest jar of every coordinate first, but they might not
 /// all be semver compliant!
-fn semver_greatest_first(vec: Vec<&str>) -> (Vec<String>, Vec<String>) {
-    let (semver, non_semver): (Vec<&str>, Vec<&str>) = vec
+fn semver_greatest_first(vec: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let (semver, non_semver): (Vec<String>, Vec<String>) = vec
         .into_iter()
-        .partition(|string| Version::parse(string).is_ok());
+        .partition(|string| Version::parse(&string).is_ok());
 
     let mut parsed: Vec<Version> = semver.iter().map(|v| Version::parse(v).unwrap()).collect();
     parsed.sort();
 
     return (
         parsed.iter().map(|v| format!("{}", v)).rev().collect(),
-        non_semver.iter().map(|v| v.to_string()).collect(),
+        non_semver,
     );
+}
+
+struct GradleJarCache {
+    root: PathBuf,
+}
+
+#[derive(Debug)]
+struct GroupArtifact {
+    group: String,
+    name: String,
+    path: String,
+}
+
+struct GroupArtifactVersion {
+    group: String,
+    name: String,
+    version: String,
+}
+
+impl GradleJarCache {
+    pub fn find_artifacts(&self) -> Vec<GroupArtifact> {
+        return WalkDir::new(&self.root)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|d| d.file_type().is_dir())
+            .filter(|d| d.depth() == 2)
+            .map(|d| {
+                let path = d.path();
+                let components = path.components();
+                let count: Vec<Component> = components.rev().take(2).collect();
+                GroupArtifact {
+                    group: count[1].as_os_str().to_str().unwrap().to_string(),
+                    name: count[0].as_os_str().to_str().unwrap().to_string(),
+                    path: path.to_str().unwrap().to_string(),
+                }
+            })
+            .collect();
+    }
+
+    pub fn find_latest_jars(&self) -> Vec<GroupArtifactVersion> {
+        self.find_artifacts().iter().for_each(|ga| {
+            let versions: Vec<String> = WalkDir::new(&ga.path)
+                .max_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|d| d.file_type().is_dir())
+                .filter(|d| d.depth() == 1)
+                .map(|d| d.file_name().to_str().unwrap().to_string())
+                .collect();
+
+            let (orderable, non_orderable) = semver_greatest_first(versions);
+            dbg!(orderable);
+            dbg!(non_orderable);
+        });
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]
@@ -137,12 +195,20 @@ mod test {
         Ok(())
     }
 
+    #[test]
+    fn do_stuff() {
+        let cache = super::GradleJarCache {
+            root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
+        };
+        cache.find_latest_jars();
+    }
+
     // walkdir can find every single file in the gradle cache in roughly 1 second, but the jar parsing is expensive
     // by picking only
 
     #[test]
     fn how_fast_can_we_crawl() -> Result<(), std::io::Error> {
-        let cache = GradleJarCache {
+        let cache = super::GradleJarCache {
             root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
         };
 
@@ -152,44 +218,16 @@ mod test {
 
     #[test]
     fn sort_newest_first() {
-        let vec = vec!["1.0.0", "2.0.0", "3.0.0", "5.3.4.Final"];
+        let vec = vec![
+            "1.0.0".to_string(),
+            "2.0.0".to_string(),
+            "3.0.0".to_string(),
+            "5.3.4.Final".to_string(),
+        ];
 
         let (orderable, non_orderable) = super::semver_greatest_first(vec);
 
         assert_eq!(orderable, vec!["3.0.0", "2.0.0", "1.0.0"]);
         assert_eq!(non_orderable, vec!["5.3.4.Final"]);
-    }
-
-    struct GradleJarCache {
-        root: PathBuf,
-    }
-
-    #[derive(Debug)]
-    struct GroupArtifact {
-        group: String,
-        name: String,
-        path: String,
-    }
-
-    impl GradleJarCache {
-        pub fn find_artifacts(&self) -> Vec<GroupArtifact> {
-            return WalkDir::new(&self.root)
-                .max_depth(2)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|d| d.file_type().is_dir())
-                .filter(|d| d.depth() == 2)
-                .map(|d| {
-                    let path = d.path();
-                    let components = path.components();
-                    let count: Vec<Component> = components.rev().take(2).collect();
-                    GroupArtifact {
-                        group: count[1].as_os_str().to_str().unwrap().to_string(),
-                        name: count[0].as_os_str().to_str().unwrap().to_string(),
-                        path: path.to_str().unwrap().to_string(),
-                    }
-                })
-                .collect();
-        }
     }
 }
