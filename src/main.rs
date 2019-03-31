@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env::args;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::stdin;
+use std::io::Cursor;
 use std::time::Instant;
 
 use walkdir::{DirEntry, WalkDir};
@@ -40,28 +40,26 @@ fn main() -> Result<(), std::io::Error> {
     let duration = after.duration_since(before);
     println!("Indexed {:?} classes in {:?}", classes.len(), duration);
 
-    dbg!(&classes.iter().nth(1).unwrap());
+    let keys: Vec<String> = classes.keys().map(|s| s.to_owned()).collect();
+    let classnames_for_skim = keys.join("\n");
 
-    loop {
-        println!("Enter a search term, or Ctrl-C to exist:");
+    let options = skim::SkimOptionsBuilder::default()
+        .prompt(Some("class:"))
+        .build()
+        .unwrap();
 
-        let mut user_input = String::new();
-        stdin().read_line(&mut user_input)?;
+    let vec = skim::Skim::run_with(&options, Some(Box::new(Cursor::new(classnames_for_skim))))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(|| Vec::new());
 
-        let search_term = user_input.trim().to_lowercase();
+    let item = vec.first().unwrap();
+    println!("Selected {}: {}", item.get_index(), item.get_output_text());
 
-        classes
-            .iter()
-            .filter(|(key, _)| key.to_lowercase().contains(&search_term))
-            .take(4)
-            .for_each(|(key, gavs)| {
-                println!("\t{} {}", key, gavs.len());
+    let jars = classes
+        .get(&item.get_output_text().to_string())
+        .expect("Match is always present in original map");
 
-                for gav in gavs {
-                    println!("\t\t{:?}", gav);
-                }
-            });
-    }
+    dbg!(jars);
 
     Ok(())
 }
