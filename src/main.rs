@@ -166,7 +166,13 @@ impl GradleJarCache {
         buf.push(gav.name);
         buf.push(gav.version);
 
-        buf
+        let jar: Option<DirEntry> = WalkDir::new(buf)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(is_jar)
+            .nth(0);
+
+        jar.expect("GAV did not contain a .jar").into_path()
     }
 
     pub fn find_jars_latest_first(&self) -> Vec<GroupArtifactVersion> {
