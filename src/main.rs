@@ -7,45 +7,54 @@ use std::io::Cursor;
 use std::path::{Component, PathBuf};
 use std::time::Instant;
 
+use rayon::prelude::*;
 use semver::Version;
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
 fn main() -> Result<(), std::io::Error> {
-    let mut classes: BTreeMap<String, Vec<OsString>> = BTreeMap::new();
-
     let before = Instant::now();
     let cache = GradleJarCache {
         root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
     };
 
-    for jar_path in cache
+    let entries: Vec<(String, OsString)> = cache
         .find_jars_latest_first()
-        .iter()
+        .par_iter()
         .map(|gav| cache.jar_for_path(gav))
         .filter_map(|maybe| maybe)
-    {
-        let jar_file = File::open(&jar_path)?;
-        let mut jar = ZipArchive::new(jar_file)?;
+        .flat_map(|jar_path| {
+            let jar_file = File::open(&jar_path).unwrap();
+            let mut jar = ZipArchive::new(jar_file).unwrap();
 
-        for i in 0..jar.len() {
-            let jar_entry = jar.by_index(i)?;
+            (0..jar.len())
+                .map(|i| {
+                    let jar_entry = jar.by_index(i).unwrap();
 
-            if jar_entry.name().contains('$') {
-                // TODO(dfox): don't keep anonymous inner classes (e.g. CacheKey$1)
-                continue;
-            }
+                    if jar_entry.name().contains('$') {
+                        // TODO(dfox): don't keep anonymous inner classes (e.g. CacheKey$1)
+                        return None;
+                    }
 
-            if !jar_entry.name().ends_with(".class") {
-                continue;
-            }
+                    if !jar_entry.name().ends_with(".class") {
+                        return None;
+                    }
 
-            let class = jar_entry.sanitized_name();
-            classes
-                .entry(class.to_str().unwrap().to_string())
-                .or_default()
-                .push(jar_path.clone().into_os_string());
-        }
+                    let class = jar_entry.sanitized_name();
+
+                    Some((
+                        class.to_str().unwrap().to_string(),
+                        jar_path.clone().into_os_string(),
+                    ))
+                })
+                .filter_map(|pair| pair)
+                .collect::<Vec<(String, OsString)>>()
+        })
+        .collect();
+
+    let mut classes: BTreeMap<String, Vec<OsString>> = BTreeMap::new();
+    for (class, jar) in entries {
+        classes.entry(class).or_default().push(jar);
     }
 
     let after = Instant::now();
