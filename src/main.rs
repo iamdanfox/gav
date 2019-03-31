@@ -18,8 +18,14 @@ fn main() -> Result<(), std::io::Error> {
         root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
     };
 
-    let entries: Vec<(String, OsString)> = cache
-        .find_jars_latest_first()
+    let gavs = cache.find_jars_latest_first();
+    println!(
+        "Found {:?} gavs in {:?}",
+        gavs.len(),
+        Instant::now().duration_since(before)
+    );
+
+    let entries: Vec<(String, OsString)> = gavs
         .par_iter()
         .map(|gav| cache.jar_for_path(gav))
         .filter_map(|maybe| maybe)
@@ -57,8 +63,7 @@ fn main() -> Result<(), std::io::Error> {
         classes.entry(class).or_default().push(jar);
     }
 
-    let after = Instant::now();
-    let duration = after.duration_since(before);
+    let duration = Instant::now().duration_since(before);
     println!("Indexed {:?} classes in {:?}", classes.len(), duration);
 
     let keys: Vec<String> = classes
