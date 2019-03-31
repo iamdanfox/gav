@@ -89,8 +89,9 @@ fn is_jar(e: &DirEntry) -> bool {
 mod test {
     use std::collections::HashSet;
     use std::fs::File;
-    use std::path::PathBuf;
+    use std::path::{Component, Path, PathBuf};
 
+    use walkdir::WalkDir;
     use zip::ZipArchive;
 
     #[test]
@@ -116,5 +117,51 @@ mod test {
         )));
         assert_eq!(classes.len(), 1950);
         Ok(())
+    }
+
+    // walkdir can find every single file in the gradle cache in roughly 1 second, but the jar parsing is expensive
+    // by picking only
+
+    #[test]
+    fn how_fast_can_we_crawl() -> Result<(), std::io::Error> {
+        let cache = GradleJarCache {
+            root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
+        };
+
+        dbg!(cache.find_artifacts());
+        Ok(())
+    }
+
+    struct GradleJarCache {
+        root: PathBuf,
+    }
+
+    #[derive(Debug)]
+    struct GroupArtifact {
+        group: String,
+        name: String,
+        path: String,
+    }
+
+    impl GradleJarCache {
+        pub fn find_artifacts(&self) -> Vec<GroupArtifact> {
+            return WalkDir::new(&self.root)
+                .max_depth(2)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|d| d.file_type().is_dir())
+                .filter(|d| d.depth() == 2)
+                .map(|d| {
+                    let path = d.path();
+                    let components = path.components();
+                    let count: Vec<Component> = components.rev().take(2).collect();
+                    GroupArtifact {
+                        group: count[1].as_os_str().to_str().unwrap().to_string(),
+                        name: count[0].as_os_str().to_str().unwrap().to_string(),
+                        path: path.to_str().unwrap().to_string(),
+                    }
+                })
+                .collect();
+        }
     }
 }
