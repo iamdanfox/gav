@@ -140,7 +140,7 @@ impl Debug for GroupArtifactVersion {
 }
 
 impl GradleJarCache {
-    pub fn find_artifacts(&self) -> Vec<GroupArtifact> {
+    pub fn find_jars(&self) -> Vec<GroupArtifact> {
         return WalkDir::new(&self.root)
             .max_depth(2)
             .into_iter()
@@ -160,39 +160,46 @@ impl GradleJarCache {
             .collect();
     }
 
-    pub fn find_latest_jars(&self) -> Vec<GroupArtifactVersion> {
-        return self
-            .find_artifacts()
-            .iter()
-            .flat_map(|ga| {
-                let versions: Vec<String> = WalkDir::new(&ga.path)
-                    .max_depth(1)
-                    .into_iter()
-                    .filter_map(|e| e.ok())
-                    .filter(|d| d.file_type().is_dir())
-                    .filter(|d| d.depth() == 1)
-                    .map(|d| d.file_name().to_str().unwrap().to_string())
-                    .collect();
+    pub fn find_jars_latest_first(&self) -> Vec<GroupArtifactVersion> {
+        let mut vec1: Vec<GroupArtifactVersion> = Vec::new();
+        let mut vec2: Vec<GroupArtifactVersion> = Vec::new();
 
-                let (orderable, non_orderable) = semver_greatest_first(versions);
+        self.find_jars().iter().for_each(|ga| {
+            let versions: Vec<String> = WalkDir::new(&ga.path)
+                .max_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|d| d.file_type().is_dir())
+                .filter(|d| d.depth() == 1)
+                .map(|d| d.file_name().to_str().unwrap().to_string())
+                .collect();
 
-                let orderable_gavs = orderable.into_iter().map(|v| GroupArtifactVersion {
-                    group: ga.group.clone(),
-                    name: ga.name.clone(),
-                    version: v,
-                });
+            let (orderable, non_orderable) = semver_greatest_first(versions);
 
-                let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
-                    group: ga.group.clone(),
-                    name: ga.name.clone(),
-                    version: v,
-                });
+            let orderable_gavs = orderable.into_iter().map(|v| GroupArtifactVersion {
+                group: ga.group.clone(),
+                name: ga.name.clone(),
+                version: v,
+            });
 
-                let both: Vec<GroupArtifactVersion> =
-                    orderable_gavs.chain(non_orderable_gavs).collect();
-                return both;
-            })
-            .collect();
+            let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
+                group: ga.group.clone(),
+                name: ga.name.clone(),
+                version: v,
+            });
+
+            let mut both: Vec<GroupArtifactVersion> =
+                orderable_gavs.chain(non_orderable_gavs).collect();
+
+            if let Some(head) = both.pop() {
+                vec1.push(head);
+                vec2.extend(both);
+            }
+        });
+
+        vec1.extend(vec2);
+
+        vec1
     }
 }
 
@@ -234,7 +241,7 @@ mod test {
         let cache = super::GradleJarCache {
             root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
         };
-        cache.find_latest_jars();
+        cache.find_jars_latest_first();
     }
 
     // walkdir can find every single file in the gradle cache in roughly 1 second, but the jar parsing is expensive
@@ -246,7 +253,7 @@ mod test {
             root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
         };
 
-        dbg!(cache.find_artifacts());
+        dbg!(cache.find_jars());
         Ok(())
     }
 
@@ -270,6 +277,6 @@ mod test {
         let cache = super::GradleJarCache {
             root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
         };
-        dbg!(cache.find_latest_jars());
+        dbg!(cache.find_jars_latest_first());
     }
 }
