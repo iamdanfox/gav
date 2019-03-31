@@ -5,7 +5,9 @@ use std::fs::File;
 use std::io::Cursor;
 use std::time::Instant;
 
+use core::fmt::{Debug, Write};
 use semver::Version;
+use std::fmt::{Display, Error, Formatter};
 use std::path::{Component, Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
@@ -120,6 +122,23 @@ struct GroupArtifactVersion {
     version: String,
 }
 
+impl Display for GroupArtifactVersion {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        f.write_str(&self.group)?;
+        f.write_char(':')?;
+        f.write_str(&self.name)?;
+        f.write_char(':')?;
+        f.write_str(&self.version)?;
+        Ok(())
+    }
+}
+
+impl Debug for GroupArtifactVersion {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        Display::fmt(self, f)
+    }
+}
+
 impl GradleJarCache {
     pub fn find_artifacts(&self) -> Vec<GroupArtifact> {
         return WalkDir::new(&self.root)
@@ -142,21 +161,38 @@ impl GradleJarCache {
     }
 
     pub fn find_latest_jars(&self) -> Vec<GroupArtifactVersion> {
-        self.find_artifacts().iter().for_each(|ga| {
-            let versions: Vec<String> = WalkDir::new(&ga.path)
-                .max_depth(1)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|d| d.file_type().is_dir())
-                .filter(|d| d.depth() == 1)
-                .map(|d| d.file_name().to_str().unwrap().to_string())
-                .collect();
+        return self
+            .find_artifacts()
+            .iter()
+            .flat_map(|ga| {
+                let versions: Vec<String> = WalkDir::new(&ga.path)
+                    .max_depth(1)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|d| d.file_type().is_dir())
+                    .filter(|d| d.depth() == 1)
+                    .map(|d| d.file_name().to_str().unwrap().to_string())
+                    .collect();
 
-            let (orderable, non_orderable) = semver_greatest_first(versions);
-            dbg!(orderable);
-            dbg!(non_orderable);
-        });
-        unimplemented!()
+                let (orderable, non_orderable) = semver_greatest_first(versions);
+
+                let orderable_gavs = orderable.into_iter().map(|v| GroupArtifactVersion {
+                    group: ga.group.clone(),
+                    name: ga.name.clone(),
+                    version: v,
+                });
+
+                let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
+                    group: ga.group.clone(),
+                    name: ga.name.clone(),
+                    version: v,
+                });
+
+                let both: Vec<GroupArtifactVersion> =
+                    orderable_gavs.chain(non_orderable_gavs).collect();
+                return both;
+            })
+            .collect();
     }
 }
 
@@ -229,5 +265,13 @@ mod test {
 
         assert_eq!(orderable, vec!["3.0.0", "2.0.0", "1.0.0"]);
         assert_eq!(non_orderable, vec!["5.3.4.Final"]);
+    }
+
+    #[test]
+    fn find_latest_jars() {
+        let cache = super::GradleJarCache {
+            root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
+        };
+        dbg!(cache.find_latest_jars());
     }
 }
