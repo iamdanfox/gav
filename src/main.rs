@@ -1,11 +1,10 @@
 use core::fmt::{Debug, Write};
 use std::collections::BTreeMap;
-use std::env::args;
 use std::ffi::OsString;
 use std::fmt::{Display, Error, Formatter};
 use std::fs::File;
 use std::io::Cursor;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 use std::time::Instant;
 
 use semver::Version;
@@ -191,7 +190,7 @@ impl GradleJarCache {
                 .map(|d| d.file_name().to_str().unwrap().to_string())
                 .collect();
 
-            let (orderable, non_orderable) = semver_greatest_first(versions);
+            let (orderable, _non_orderable) = semver_greatest_first(versions);
 
             let mut orderable_gavs: Vec<GroupArtifactVersion> = orderable
                 .into_iter()
@@ -232,8 +231,9 @@ mod test {
     use std::fs::File;
     use std::path::PathBuf;
 
-    use crate::GroupArtifactVersion;
     use zip::ZipArchive;
+
+    use crate::GroupArtifactVersion;
 
     #[test]
     fn parse_jar() -> Result<(), std::io::Error> {
