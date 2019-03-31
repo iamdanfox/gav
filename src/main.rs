@@ -105,10 +105,6 @@ fn semver_greatest_first(vec: Vec<String>) -> (Vec<String>, Vec<String>) {
     );
 }
 
-struct GradleJarCache {
-    root: PathBuf,
-}
-
 #[derive(Debug)]
 struct GroupArtifact {
     group: String,
@@ -139,6 +135,10 @@ impl Debug for GroupArtifactVersion {
     }
 }
 
+struct GradleJarCache {
+    root: PathBuf,
+}
+
 impl GradleJarCache {
     pub fn find_jars(&self) -> Vec<GroupArtifact> {
         return WalkDir::new(&self.root)
@@ -160,9 +160,18 @@ impl GradleJarCache {
             .collect();
     }
 
+    pub fn path(&self, gav: GroupArtifactVersion) -> PathBuf {
+        let mut buf = self.root.clone();
+        buf.push(gav.group);
+        buf.push(gav.name);
+        buf.push(gav.version);
+
+        buf
+    }
+
     pub fn find_jars_latest_first(&self) -> Vec<GroupArtifactVersion> {
         let mut vec1: Vec<GroupArtifactVersion> = Vec::new();
-        let mut vec2: Vec<GroupArtifactVersion> = Vec::new();
+        //        let mut vec2: Vec<GroupArtifactVersion> = Vec::new();
 
         self.find_jars().iter().for_each(|ga| {
             let versions: Vec<String> = WalkDir::new(&ga.path)
@@ -176,29 +185,35 @@ impl GradleJarCache {
 
             let (orderable, non_orderable) = semver_greatest_first(versions);
 
-            let orderable_gavs = orderable.into_iter().map(|v| GroupArtifactVersion {
-                group: ga.group.clone(),
-                name: ga.name.clone(),
-                version: v,
-            });
+            let mut orderable_gavs: Vec<GroupArtifactVersion> = orderable
+                .into_iter()
+                .map(|v| GroupArtifactVersion {
+                    group: ga.group.clone(),
+                    name: ga.name.clone(),
+                    version: v,
+                })
+                .collect();
 
-            let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
-                group: ga.group.clone(),
-                name: ga.name.clone(),
-                version: v,
-            });
-
-            let mut both: Vec<GroupArtifactVersion> =
-                orderable_gavs.chain(non_orderable_gavs).collect();
-
-            if let Some(head) = both.pop() {
+            if let Some(head) = orderable_gavs.pop() {
                 vec1.push(head);
-                vec2.extend(both);
             }
+
+            //            let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
+            //                group: ga.group.clone(),
+            //                name: ga.name.clone(),
+            //                version: v,
+            //            });
+            //
+            //            let mut both: Vec<GroupArtifactVersion> =
+            //                orderable_gavs.chain(non_orderable_gavs).collect();
+
+            //            if let Some(head) = both.pop() {
+            //                vec1.push(head);
+            //                vec2.extend(both);
+            //            }
         });
 
-        vec1.extend(vec2);
-
+        //        vec1.extend(vec2);
         vec1
     }
 }
@@ -209,6 +224,7 @@ mod test {
     use std::fs::File;
     use std::path::PathBuf;
 
+    use crate::GroupArtifactVersion;
     use zip::ZipArchive;
 
     #[test]
@@ -273,10 +289,23 @@ mod test {
     }
 
     #[test]
-    fn find_latest_jars() {
+    fn find_jars_latest_first() {
         let cache = super::GradleJarCache {
             root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
         };
         dbg!(cache.find_jars_latest_first());
+    }
+
+    #[test]
+    fn find_single_path() {
+        let cache = super::GradleJarCache {
+            root: PathBuf::from("/Users/dfox/.gradle/caches/modules-2/files-2.1/"),
+        };
+        let buf = cache.path(GroupArtifactVersion {
+            group: "io.searchbox".to_string(),
+            name: "jest".to_string(),
+            version: "0.1.7".to_string(),
+        });
+        println!("{:?}", buf);
     }
 }
