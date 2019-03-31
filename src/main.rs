@@ -1,14 +1,14 @@
+use core::fmt::{Debug, Write};
 use std::collections::BTreeMap;
 use std::env::args;
 use std::ffi::OsString;
+use std::fmt::{Display, Error, Formatter};
 use std::fs::File;
 use std::io::Cursor;
+use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
-use core::fmt::{Debug, Write};
 use semver::Version;
-use std::fmt::{Display, Error, Formatter};
-use std::path::{Component, Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
@@ -200,10 +200,8 @@ impl GradleJarCache {
 mod test {
     use std::collections::HashSet;
     use std::fs::File;
-    use std::path::{Component, Path, PathBuf};
+    use std::path::PathBuf;
 
-    use semver::Version;
-    use walkdir::WalkDir;
     use zip::ZipArchive;
 
     #[test]
