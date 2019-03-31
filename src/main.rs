@@ -1,9 +1,8 @@
 use core::fmt::{Debug, Write};
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::fmt::{Display, Error, Formatter};
 use std::fs::File;
-use std::io::Cursor;
+use std::io::{stdin, Cursor};
 use std::path::{Component, PathBuf};
 use std::time::Instant;
 
@@ -67,12 +66,6 @@ fn main() -> Result<(), std::io::Error> {
     let duration = Instant::now().duration_since(before);
     eprintln!("Indexed {:?} classes in {:?}", classes.len(), duration);
 
-    let keys: Vec<String> = classes
-        .keys()
-        .map(|s| s.to_owned().replace("/", ".").replace(".class", ""))
-        .collect();
-    let classnames_for_skim = keys.join("\n");
-
     let options = skim::SkimOptionsBuilder::default()
         .prompt(Some("class:"))
         .tiebreak(Some("score,end,-begin,index".to_string()))
@@ -80,6 +73,11 @@ fn main() -> Result<(), std::io::Error> {
         .build()
         .unwrap();
 
+    let keys: Vec<String> = classes
+        .keys()
+        .map(|s| s.to_owned().replace("/", ".").replace(".class", ""))
+        .collect();
+    let classnames_for_skim = keys.join("\n");
     let vec = skim::Skim::run_with(&options, Some(Box::new(Cursor::new(classnames_for_skim))))
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
@@ -194,7 +192,7 @@ impl GradleJarCache {
 
     pub fn find_jars_latest_first(&self) -> Vec<GroupArtifactVersion> {
         let mut vec1: Vec<GroupArtifactVersion> = Vec::new();
-        //        let mut vec2: Vec<GroupArtifactVersion> = Vec::new();
+        let mut vec2: Vec<GroupArtifactVersion> = Vec::new();
 
         self.find_jars().iter().for_each(|ga| {
             let versions: Vec<String> = WalkDir::new(&ga.path)
@@ -206,37 +204,34 @@ impl GradleJarCache {
                 .map(|d| d.file_name().to_str().unwrap().to_string())
                 .collect();
 
-            let (orderable, _non_orderable) = semver_greatest_first(versions);
+            let (orderable, non_orderable) = semver_greatest_first(versions);
 
-            let mut orderable_gavs: Vec<GroupArtifactVersion> = orderable
-                .into_iter()
-                .map(|v| GroupArtifactVersion {
-                    group: ga.group.clone(),
-                    name: ga.name.clone(),
-                    version: v,
-                })
-                .collect();
+            let orderable_gavs = orderable.into_iter().map(|v| GroupArtifactVersion {
+                group: ga.group.clone(),
+                name: ga.name.clone(),
+                version: v,
+            });
 
-            if let Some(head) = orderable_gavs.pop() {
-                vec1.push(head);
-            }
-
-            //            let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
-            //                group: ga.group.clone(),
-            //                name: ga.name.clone(),
-            //                version: v,
-            //            });
-            //
-            //            let mut both: Vec<GroupArtifactVersion> =
-            //                orderable_gavs.chain(non_orderable_gavs).collect();
-
-            //            if let Some(head) = both.pop() {
+            //            if let Some(head) = orderable_gavs.pop() {
             //                vec1.push(head);
-            //                vec2.extend(both);
             //            }
+
+            let non_orderable_gavs = non_orderable.into_iter().map(|v| GroupArtifactVersion {
+                group: ga.group.clone(),
+                name: ga.name.clone(),
+                version: v,
+            });
+
+            let mut both: Vec<GroupArtifactVersion> =
+                orderable_gavs.chain(non_orderable_gavs).collect();
+
+            if let Some(head) = both.pop() {
+                vec1.push(head);
+                vec2.extend(both);
+            }
         });
 
-        //        vec1.extend(vec2);
+        vec1.extend(vec2);
         vec1
     }
 }
