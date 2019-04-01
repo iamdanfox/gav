@@ -10,6 +10,9 @@ use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use semver::Version;
+use serde::de::Visitor;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
@@ -139,18 +142,59 @@ fn semver_greatest_first(vec: Vec<String>) -> (Vec<String>, Vec<String>) {
     );
 }
 
-#[derive(Debug)]
+#[derive(Debug, Ord, Eq, PartialOrd, PartialEq)]
 struct GroupArtifact {
     group: String,
     name: String,
     path: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Ord, Eq, PartialOrd, PartialEq)]
 struct GroupArtifactVersion {
     group: String,
     name: String,
     version: String,
+}
+
+impl Serialize for GroupArtifactVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self))
+    }
+}
+
+impl<'de> Deserialize<'de> for GroupArtifactVersion {
+    fn deserialize<D>(deserializer: D) -> Result<GroupArtifactVersion, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(GavVisitor)
+    }
+}
+
+struct GavVisitor;
+
+impl<'de> Visitor<'de> for GavVisitor {
+    type Value = GroupArtifactVersion;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a string, e.g. \"com.foo:bar:1.2.3\"")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        let split: Vec<&str> = v.split(":").collect();
+
+        Ok(GroupArtifactVersion {
+            group: split[0].to_string(),
+            name: split[1].to_string(),
+            version: split[2].to_string(),
+        })
+    }
 }
 
 impl Display for GroupArtifactVersion {
@@ -350,5 +394,24 @@ mod test {
             version: "27.1-jre".to_string(),
         });
         println!("{:?}", buf);
+    }
+
+    #[test]
+    fn serde_should_work() -> Result<(), std::io::Error> {
+        let version = GroupArtifactVersion {
+            group: "com.google.guava".to_string(),
+            name: "guava".to_string(),
+            version: "23.6-jre".to_string(),
+        };
+        let result = serde_json::to_string(&version)?;
+
+        assert_eq!(result, "\"com.google.guava:guava:23.6-jre\"");
+
+        let deserialized: GroupArtifactVersion =
+            serde_json::from_str("\"com.google.guava:guava:23.6-jre\"")?;
+
+        assert_eq!(deserialized, version);
+
+        Ok(())
     }
 }
