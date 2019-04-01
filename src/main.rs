@@ -1,7 +1,7 @@
 use core::fmt::{Debug, Write};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Error, Formatter};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Cursor;
 use std::path::{Component, PathBuf};
 use std::time::Instant;
@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use semver::Version;
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt;
+use std::{fmt, thread};
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
@@ -82,6 +82,14 @@ fn main() -> Result<(), std::io::Error> {
     for (class, jar) in entries {
         classes.entry(class).or_default().push(jar);
     }
+
+    let persisted = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open("/Users/dfox/Desktop/foo.json")
+        .unwrap();
+    serde_json::to_writer_pretty(persisted, &classes).unwrap();
 
     pb.finish_and_clear();
 
@@ -397,7 +405,7 @@ mod test {
     }
 
     #[test]
-    fn serde_should_work() -> Result<(), std::io::Error> {
+    fn serde_for_gavs() -> Result<(), std::io::Error> {
         let version = GroupArtifactVersion {
             group: "com.google.guava".to_string(),
             name: "guava".to_string(),
