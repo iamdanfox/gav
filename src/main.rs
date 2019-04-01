@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use semver::Version;
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::{fmt, thread};
+use std::fmt;
 use walkdir::{DirEntry, WalkDir};
 use zip::ZipArchive;
 
