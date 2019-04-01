@@ -91,6 +91,11 @@ fn main() -> Result<(), std::io::Error> {
         .unwrap();
     serde_json::to_writer_pretty(persisted, &classes).unwrap();
 
+    //    let file = File::open("/Users/dfox/Desktop/foo.json")?;
+    //    let reader = BufReader::new(file);
+    //
+    //    let classes: BTreeMap<String, Vec<GroupArtifactVersion>> = serde_json::from_reader(reader)?;
+
     pb.finish_and_clear();
 
     let duration = Instant::now().duration_since(before);
