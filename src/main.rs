@@ -6,6 +6,7 @@ use std::io::Cursor;
 use std::path::{Component, PathBuf};
 use std::time::Instant;
 
+use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use semver::Version;
@@ -20,15 +21,19 @@ fn main() -> Result<(), std::io::Error> {
 
     let gavs = cache.find_jars_latest_first();
     eprintln!(
-        "Found {:?} gavs in {:?}",
-        gavs.len(),
-        Instant::now().duration_since(before)
+        "{} {}",
+        "[1/2]".white().dimmed(),
+        format!(
+            "Found {:?} gavs in {:?}",
+            gavs.len(),
+            Instant::now().duration_since(before)
+        )
     );
 
     let pb = ProgressBar::new(gavs.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+            .template("[{elapsed_precise}] {bar:40.white/cyan} {pos:>7}/{len:7} {msg}")
             .progress_chars("##-"),
     );
 
@@ -78,10 +83,13 @@ fn main() -> Result<(), std::io::Error> {
     pb.finish_and_clear();
 
     let duration = Instant::now().duration_since(before);
-    eprintln!("Indexed {:?} classes in {:?}", classes.len(), duration);
+    eprintln!(
+        "{} {}",
+        "[2/2]".white().dimmed(),
+        format!("Indexed {:?} classes in {:?}", classes.len(), duration)
+    );
 
     let options = skim::SkimOptionsBuilder::default()
-        .prompt(Some("class:"))
         .tiebreak(Some("score,end,-begin,index".to_string()))
         .delimiter(Some("."))
         .build()
@@ -97,15 +105,13 @@ fn main() -> Result<(), std::io::Error> {
         .unwrap_or_else(|| Vec::new());
 
     let selected = vec.first().unwrap();
-    eprintln!("Selected: {}", selected.get_output_text());
-
     classes
         .iter()
         .nth(selected.get_index())
         .expect("index should be a hit")
         .1
         .iter()
-        .for_each(|gav| println!("{}", gav));
+        .for_each(|gav| println!("{}", format!("{}", gav).white()));
 
     Ok(())
 }
