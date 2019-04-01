@@ -6,6 +6,8 @@ use std::io::Cursor;
 use std::path::{Component, PathBuf};
 use std::time::Instant;
 
+use colored::*;
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use semver::Version;
 use walkdir::{DirEntry, WalkDir};
@@ -19,14 +21,28 @@ fn main() -> Result<(), std::io::Error> {
 
     let gavs = cache.find_jars_latest_first();
     eprintln!(
-        "Found {:?} gavs in {:?}",
-        gavs.len(),
-        Instant::now().duration_since(before)
+        "{} {}",
+        "[1/2]".white().dimmed(),
+        format!(
+            "Found {:?} gavs in {:?}",
+            gavs.len(),
+            Instant::now().duration_since(before)
+        )
+    );
+
+    let pb = ProgressBar::new(gavs.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] {bar:40.white/cyan} {pos:>7}/{len:7} {msg}")
+            .progress_chars("##-"),
     );
 
     let entries: Vec<(String, GroupArtifactVersion)> = gavs
         .par_iter()
         .flat_map(|gav| {
+            pb.set_message(&format!("{}", gav));
+            pb.inc(1);
+
             let maybe_jar_path = cache.jar_for_path(&gav);
             if maybe_jar_path.is_none() {
                 return Vec::new();
@@ -36,7 +52,7 @@ fn main() -> Result<(), std::io::Error> {
             let jar_file = File::open(&jar_path).unwrap();
             let mut jar = ZipArchive::new(jar_file).unwrap();
 
-            (0..jar.len())
+            let vec: Vec<(String, GroupArtifactVersion)> = (0..jar.len())
                 .map(|i| {
                     let jar_entry = jar.by_index(i).unwrap();
 
@@ -54,7 +70,8 @@ fn main() -> Result<(), std::io::Error> {
                     Some((class.to_str().unwrap().to_string(), gav.clone()))
                 })
                 .filter_map(|pair| pair)
-                .collect::<Vec<(String, GroupArtifactVersion)>>()
+                .collect();
+            vec
         })
         .collect();
 
@@ -63,11 +80,16 @@ fn main() -> Result<(), std::io::Error> {
         classes.entry(class).or_default().push(jar);
     }
 
+    pb.finish_and_clear();
+
     let duration = Instant::now().duration_since(before);
-    eprintln!("Indexed {:?} classes in {:?}", classes.len(), duration);
+    eprintln!(
+        "{} {}",
+        "[2/2]".white().dimmed(),
+        format!("Indexed {:?} classes in {:?}", classes.len(), duration)
+    );
 
     let options = skim::SkimOptionsBuilder::default()
-        .prompt(Some("class:"))
         .tiebreak(Some("score,end,-begin,index".to_string()))
         .delimiter(Some("."))
         .build()
@@ -83,15 +105,13 @@ fn main() -> Result<(), std::io::Error> {
         .unwrap_or_else(|| Vec::new());
 
     let selected = vec.first().unwrap();
-    eprintln!("Selected: {}", selected.get_output_text());
-
     classes
         .iter()
         .nth(selected.get_index())
         .expect("index should be a hit")
         .1
         .iter()
-        .for_each(|gav| println!("{}", gav));
+        .for_each(|gav| println!("{}", format!("{}", gav).white()));
 
     Ok(())
 }
