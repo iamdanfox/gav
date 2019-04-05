@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 zip = "0.5"
 walkdir = "2.2.7"
-skim = "0.6.4"
+skim = "0.6.6"
 semver = "0.9.0"
 rayon = "1.0.3"
 indicatif = "0.11.0"
