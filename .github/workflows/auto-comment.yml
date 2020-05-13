@@ -1,0 +1,15 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Auto-comment
+on: [push, pull_request]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run a multi-line script
+      run: |
+        echo ${{ github.event }}
